@@ -42,7 +42,6 @@ export default class Login extends React.Component {
 
     this.setState({ btnLoading: true });
     const response = await user.login(email, password);
-    console.log(response)
     this.setState({ btnLoading: false });
     if (response.status === 'error') {
       this.setState({ errorMsg: response.message || 'An unknown error occurred.' });

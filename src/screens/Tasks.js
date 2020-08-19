@@ -5,20 +5,25 @@ import {
   TextInput,
   StyleSheet,
   ScrollView,
+  Switch,
+  Button
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import PropTypes from 'prop-types';
 import md5 from 'md5';
-import { styles } from '../utils/styles';
+import { styles, textInputs } from '../utils/styles';
 import Header from '../components/UI/Header';
 import Todos from '../components/Todos/Todos';
 import Filter from '../components/Filter/Filter';
 import ListsDb from '../database/Lists';
 import SimpleModal from '../components/Modals/SimpleModal';
-import Switch from '../components/SwitchCase/Switch';
+import SwitchCase from '../components/SwitchCase/Switch';
 import Buttons from '../components/UI/Buttons';
+import { Notifications } from 'expo';
+import { Notification } from 'expo/build/Notifications/Notifications.types'
 
 
 const localStyles = StyleSheet.create({
@@ -58,9 +63,18 @@ export default class Tasks extends React.Component {
     };
     this.deleteListAction = null;
 
+    const currentdate = new Date;
     this.state = {
       showListOptions: false,
+      showAddNewTodoModal: false,
+      showFeedBackModal: false,
+      showTodoUpdateModal: false,
+      feedBack: '',
       todo: '',
+      notes: '',
+      dueDate: currentdate,
+      strDate: currentdate.toDateString(),
+      remindMe: true,
       todos: {},
       currentFilter: 'all',
       currentUser: null,
@@ -72,6 +86,7 @@ export default class Tasks extends React.Component {
       },
       route: this.listOptions.DEFAULT,
       emailInput: '',
+      showPicker: false
     };
   }
 
@@ -81,25 +96,66 @@ export default class Tasks extends React.Component {
     const list = navigation.getParam('selectedList');
     const currentUser = navigation.getParam('currentUser');
     this.deleteListAction = navigation.getParam('deleteListAction');
-    const todos = await ListsDb.getTodos(list.key)
+    const todos = await ListsDb.getTodos(list.key, currentUser.uid)
     console.log(`componentDidMount => ${todos}`)
     this.setState({ todos, selectedList: list, currentUser });
+
+    this._notificationSubscription = Notifications.addListener(this._onReceiveNotification)
   }
 
-  componentWillUnmount() {
-    this._isMounted = false;
+  onChange = (event, selectedDate) => {
+    this.setState({
+      dueDate: selectedDate,
+      strDate: selectedDate.toDateString(),
+      showPicker: Platform.OS === 'ios'
+    })
+  };
+
+  showMode = (currentMode) => {
+    console.log(currentMode)
+    this.setState({showPicker: true, mode: currentMode})
+  };
+
+  showDatepicker = () => {
+    this.showMode('date');
+  };
+
+  showTimepicker = () => {
+    this.showMode('time');
+  };
+
+  async _sendLocalNotification () {
+    await Notifications.scheduleLocalNotificationAsync(
+      {
+        title: "リマインド",
+        body: 'Wow, I can show up even when app is closed',
+        data: {
+          message: 'テストローカル通知を受け取りました'
+        },
+      },
+      {
+        time: new Date().getTime() + 10000,
+      },
+    );
+  }
+  
+  async _onReceiveNotification (notification) {
+    alert(notification.data.message)
   }
 
   save = async (todoId, listId, todo) => {
+    const { navigation } = this.props;
+    const currentUser = navigation.getParam('currentUser');
+    
     try {
-      await ListsDb.updateTodo(todoId, listId, todo);
+      await ListsDb.updateTodo(todoId, listId, currentUser.uid, todo);
     } catch (e) {
       console.log('Error while storing Todo Items >', e);
     }
   };
 
   addTodo = () => {
-    const { todo, todos, selectedList, currentUser } = this.state;
+    const { todo, todos, selectedList, currentUser, dueDate, strDate, notes, remindMe } = this.state;
     if (todo.length === 0) {
       this.setState({ inputError: true });
       return;
@@ -109,35 +165,96 @@ export default class Tasks extends React.Component {
       key: todoKey,
       title: todo,
       completed: false,
-      createdOn: Date.now(),
-      notes: '',
-      dueDate: null,
-      remindMe: false,
+      createdOn: new Date,
+      notes: notes,
+      feedBack: '',
+      dueDate: dueDate,
+      strDate: strDate,
+      remindMe: remindMe,
       completedOn: null,
     };
 
     todos[todoKey] = todoNew;
-    console.log(todos)
-    this.setState({ todos, todo: '' }, () => ListsDb.setTodos(selectedList, todoNew, currentUser.uid));
+    this.setState({ todos, todo: '', notes: '', remindMe: true, dueDate: new Date, showAddNewTodoModal: false }, () => ListsDb.setTodos(selectedList, todoNew, currentUser.uid));
+    this._sendLocalNotification(todoNew)
+  };
+
+  updateTodo = (todoKey) => {
+    console.log(todoKey)
+    const { todo, todos, selectedList, currentUser, dueDate, strDate, notes, remindMe } = this.state;
+    if (todo.length === 0) {
+      this.setState({ inputError: true });
+      return;
+    }
+    const todoNew = {
+      key: todoKey,
+      title: todo,
+      completed: false,
+      notes: notes,
+      feedBack: '',
+      dueDate: dueDate,
+      strDate: strDate,
+      remindMe: remindMe,
+      completedOn: null,
+    };
+    let nortificate = false
+    if (todos[todoKey].strDate !== strDate) {
+      nortificate = true
+    }
+
+    todos[todoKey] = todoNew;
+    const currentDate = new Date;
+    this.setState({ todos, todo: '', notes: '', remindMe: true, dueDate: currentDate, strDate: currentDate.toDateString, showTodoUpdateModal: false }, () => ListsDb.updateTodo(todoKey, selectedList.key, currentUser.uid, todoNew));
+    if (nortificate) this._sendLocalNotification(todoNew)
   };
 
   checkBoxToggle = async (todoKey) => {
-    console.log(`checkBoxToggle => ${todoKey}`)
     const { todos, selectedList } = this.state;
     const todo = todos[todoKey];
-    console.log(todos)
-    console.log(todo)
     todo.completed = !todo.completed;
     todo.completedOn = todo.completed ? Date.now() : null;
     todos[todoKey] = todo;
-    await this.setState({ todos }, () => this.save(todoKey, selectedList.key, todo));
+    await this.setState(todos, () => this.save(todoKey, selectedList.key, todo));
   };
 
-  onDeleteAction = (todoKey) => {
+  onFeedBackAction = (todoKey, feedBack) => {
+    const { todos } = this.state;
+    const todo = todos[todoKey];
+    todo.feedBack = feedBack;
+    todos[todoKey] = todo;
+    this.setState(todos);
+  }
+  submitFeedBack = async(todoKey) => {
     const { todos, selectedList } = this.state;
-    delete todos[todoKey];
-    this.setState({ todos }, () => ListsDb.deleteTodo(todoKey, selectedList.key));
-  };
+    const todo = todos[todoKey];
+    await this.setState(todos, () => this.save(todoKey, selectedList.key, todo));
+  }
+
+  toggleModal = (target, id = undefined) => {
+    if (target === "showTodoUpdateModal" && !!id) {
+      if (!this.state[target]) {
+        const { todos } = this.state;
+        const todo = todos[id]
+        this.setState({
+          todo: todo.title,
+          notes: todo.notes,
+          remindMe: todo.remindMe,
+          strDate: todo.strDate,
+          dueDate: todo.dueDate
+        })
+      } else {
+        const currentdate = new Date
+        this.setState({
+          todo: '',
+          notes: '',
+          remindMe: true,
+          strDate: currentdate.toDateString(),
+          dueDate: currentdate
+        })
+      }
+    }
+    this.setState({[`${target}`]: !this.state[target]});
+  }
 
   deleteAllContinue = () => {
     const { todos, selectedList } = this.state;
@@ -185,9 +302,13 @@ export default class Tasks extends React.Component {
   }
 
   updateList = () => {
-    const { selectedList } = this.state;
-    ListsDb.updateTodoList(selectedList);
+    const { selectedList, currentUser } = this.state;
+    ListsDb.updateTodoList(selectedList, currentUser.uid);
     this.setState({ showListOptions: false });
+  }
+
+  showAddNewTodo = () => {
+    this.setState({ showAddNewTodoModal: true });
   }
 
   showAddedEmails = () => {
@@ -216,14 +337,14 @@ export default class Tasks extends React.Component {
   }
 
   addEmailToList = () => {
-    const { selectedList } = this.state;
+    const { selectedList, currentUser } = this.state;
     const { userEmails } = selectedList;
     let { emailInput } = this.state;
     const emailKey = md5(emailInput);
 
     userEmails[emailKey] = this.addUnverifiedUserToList(emailKey, emailInput);
     selectedList.userEmails = userEmails;
-    ListsDb.updateTodoList(selectedList);
+    ListsDb.updateTodoList(selectedList, currentUser.uid);
     emailInput = '';
     this.setState({ selectedList, emailInput });
   }
@@ -233,11 +354,21 @@ export default class Tasks extends React.Component {
     const {
       currentFilter,
       todo,
+      notes,
+      completed,
+      dueDate,
+      strDate,
+      remindMe,
       todos,
       showListOptions,
+      showAddNewTodoModal,
+      showFeedBackModal,
+      showTodoUpdateModal,
       selectedList,
       route,
       emailInput,
+      listNameErr,
+      showPicker
     } = this.state;
     const {
       DEFAULT,
@@ -246,6 +377,7 @@ export default class Tasks extends React.Component {
       ADDEMAIL,
       REMINDER,
     } = this.listOptions;
+    const nameInputStyle = listNameErr ? textInputs.error : textInputs.default;
 
     if (currentFilter !== 'all') {
       const todoKeys = Object.values(todos);
@@ -285,15 +417,11 @@ export default class Tasks extends React.Component {
           )}
         />
         <View style={localStyles.container}>
-          <TextInput
-            style={[localStyles.textInput, { color: 'white' }]}
-            autoCapitalize="sentences"
-            placeholder="What needs to be done?"
-            placeholderTextColor="rgba(255, 255, 255, 0.7)"
-            onChangeText={input => this.setState({ todo: input })}
-            blurOnSubmit={false}
-            onSubmitEditing={this.addTodo}
-            value={todo}
+          <FontAwesome
+            style={{ position: 'absolute', right: 10 }}
+            name="plus"
+            size={20}
+            onPress={this.showAddNewTodo}
           />
           <View style={localStyles.todosWrp}>
             {/* <Filter
@@ -308,11 +436,75 @@ export default class Tasks extends React.Component {
               <Todos
                 todos={todos}
                 checkBoxToggle={this.checkBoxToggle}
-                onDelete={this.onDeleteAction}
+                onFeedBack={this.onFeedBackAction}
+                submitFeedBack={this.submitFeedBack}
+                showTodoUpdateModal={showTodoUpdateModal}
+                showFeedBackModal={showFeedBackModal}
+                toggleModal={this.toggleModal}
+                todo={todo}
+                notes={notes}
+                completed={completed}
+                remindMe={remindMe}
+                strDate={strDate}
+                dueDate={dueDate}
+                setData={(object) => {this.setState(object)}}
+                showDatepicker={this.showDatepicker}
+                onChange={this.onChange}
+                updateTodo={this.updateTodo}
+                showPicker={showPicker}
               />
             </ScrollView>
           </View>
         </View>
+
+        <SimpleModal
+          title="Add new todo:"
+          visible={showAddNewTodoModal}
+          closeAction={() => this.setState({ showAddNewTodoModal: false })}
+        >
+          <TextInput
+            style={nameInputStyle}
+            autoCapitalize="sentences"
+            placeholder="What needs to be done?"
+            placeholderTextColor="rgba(255, 255, 255, 0.7)"
+            onChangeText={input => this.setState({ todo: input })}
+            blurOnSubmit={false}
+            value={todo}
+          />
+          <TextInput
+            style={nameInputStyle}
+            autoCapitalize="sentences"
+            placeholder="description"
+            placeholderTextColor="rgba(255, 255, 255, 0.7)"
+            onChangeText={input => this.setState({ notes: input })}
+            blurOnSubmit={false}
+            value={notes}
+          />
+          <View><Text>Remind Me</Text></View>
+          <Switch
+            onValueChange={input => this.setState({ remindMe: input })}
+            value={remindMe}
+          />
+
+          <View>
+            <Button onPress={this.showDatepicker} title={strDate} />
+          </View>
+          {showPicker && (
+            <DateTimePicker
+              testID="dateTimePicker"
+              value={dueDate}
+              mode="date"
+              is24Hour={true}
+              display="default"
+              onChange={this.onChange}
+            />
+          )}
+          <Buttons
+            type="primary"
+            title="Add List"
+            onPress={this.addTodo}
+          />
+        </SimpleModal>
 
         {/* List Options Modal */}
         <SimpleModal
@@ -325,9 +517,9 @@ export default class Tasks extends React.Component {
             })
           }
         >
-          <Switch route={route}>
+          <SwitchCase route={route}>
             {/* DEFAULT */}
-            <Switch.Case match={DEFAULT}>
+            <SwitchCase.Case match={DEFAULT}>
               <View>
                 <Buttons
                   type="link"
@@ -335,10 +527,10 @@ export default class Tasks extends React.Component {
                   onPress={() => this.setState({ route: this.listOptions.DELETE })}
                 />
               </View>
-            </Switch.Case>
+            </SwitchCase.Case>
 
             {/* DELETE */}
-            <Switch.Case match={DELETE}>
+            <SwitchCase.Case match={DELETE}>
               <View>
                 <Text>Are you sure you wanna DELETE this list: </Text>
               </View>
@@ -349,10 +541,10 @@ export default class Tasks extends React.Component {
                   onPress={this.deleteList}
                 />
               </View>
-            </Switch.Case>
+            </SwitchCase.Case>
 
             {/* RENAME */}
-            <Switch.Case match={RENAME}>
+            <SwitchCase.Case match={RENAME}>
               <View>
                 <Text>List Name</Text>
                 <TextInput
@@ -361,10 +553,10 @@ export default class Tasks extends React.Component {
                   onSubmitEditing={this.updateList}
                 />
               </View>
-            </Switch.Case>
+            </SwitchCase.Case>
 
             {/* ADDUSER */}
-            <Switch.Case match={ADDEMAIL}>
+            <SwitchCase.Case match={ADDEMAIL}>
               <View>
                 <Text>Add Users:</Text>
               </View>
@@ -378,15 +570,15 @@ export default class Tasks extends React.Component {
                   onSubmitEditing={this.addEmailToList}
                 />
               </View>
-            </Switch.Case>
+            </SwitchCase.Case>
 
             {/* REMINDER */}
-            <Switch.Case match={REMINDER}>
+            <SwitchCase.Case match={REMINDER}>
               <View>
                 <Text>Reminder:</Text>
               </View>
-            </Switch.Case>
-          </Switch>
+            </SwitchCase.Case>
+          </SwitchCase>
         </SimpleModal>
       </LinearGradient>
     );

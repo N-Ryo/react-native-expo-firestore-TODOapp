@@ -13,21 +13,54 @@ const styles = StyleSheet.create({
 });
 
 const Todos = (props) => {
-  const { todos, checkBoxToggle, onDelete } = props;
+  const {
+    todos,
+    checkBoxToggle,
+    onFeedBack,
+    submitFeedBack,
+    showTodoUpdateModal,
+    showFeedBackModal,
+    toggleModal,
+    setData,
+    showDatepicker,
+    onChange,
+    updateTodo,
+    showPicker,
+    todo,
+    notes,
+    remindMe,
+    strDate,
+    dueDate
+  } = props;
   let todosEl = <Text style={styles.noTodo}>No TODOs</Text>;
 
   if (todos !== undefined) {
     const todoKeys = Object.keys(todos);
     todosEl = todoKeys.map((todoKey) => {
-      const todo = todos[todoKey];
+      const targetTodo = todos[todoKey];
+
       return (
         <Todo
           key={todoKey}
           id={todoKey}
-          title={todo.title}
-          completed={todo.completed}
           checkBoxToggle={checkBoxToggle}
-          onDelete={onDelete}
+          onFeedBack={onFeedBack}
+          submitFeedBack={submitFeedBack}
+          showTodoUpdateModal={showTodoUpdateModal}
+          showFeedBackModal={showFeedBackModal}
+          toggleModal={toggleModal}
+          title={targetTodo.title}
+          completed={todo.completed}
+          todo={todo}
+          notes={notes}
+          remindMe={remindMe}
+          strDate={strDate}
+          dueDate={dueDate}
+          setData={setData}
+          showDatepicker={showDatepicker}
+          onChange={onChange}
+          updateTodo={(todoKey) => {updateTodo(todoKey)}}
+          showPicker={showPicker}
         />
       );
     });

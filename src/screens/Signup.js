@@ -37,7 +37,6 @@ export default class Signup extends React.Component {
     const { email, password } = this.state;
     const { navigation } = this.props;
     const response = await user.signup(email, password);
-    console.log(response)
     this.setState({ btnLoading: false });
     if (response.status === 'error') {
       this.setState({ errorMsg: response.message || 'An unknown error occurred.' });

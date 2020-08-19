@@ -11,7 +11,6 @@ class Lists extends Database {
     await this.database.collection(userListsRef).get().then(async function(querySnapshot) {
       await querySnapshot.forEach(function(doc) {
         // doc.data() is never undefined for query doc snapshots
-        console.log(doc.id, " => ", doc.data());
         lists[index] = doc.data();
         index++
       });
@@ -36,7 +35,6 @@ class Lists extends Database {
       return lists;
     // }
 
-    return null;
   }
 
   addTodoList = async (list, userId, _listId = null) => {
@@ -51,17 +49,16 @@ class Lists extends Database {
       //     lists[doc.id] = doc.data();
       //   });
       // });
-      await this.database.collection(userListsRef).doc(listId).set(list);
-      return this.database.collection('lists').doc(listId).set(list);
+      return await this.database.collection(userListsRef).doc(listId).set(list);
     } catch (e) {
       console.log('addTodoList error >>', e);
       return null;
     }
   }
 
-  updateTodoList = async (list) => {
+  updateTodoList = async (list, userId) => {
     try {
-      const listRef = `lists/${list.key}`;
+      const listRef = `users/${userId}/lists/${list.key}`;
       return await this.database.ref(listRef).update(list);
     } catch (e) {
       console.log('updateTodoList error >>', e);
@@ -70,42 +67,20 @@ class Lists extends Database {
   }
 
   deleteTodoList = async (listId, userId) => {
-    // const listRef = `lists/${listId}`;
-    // const userListsRef = `users/${userId}/lists/${listId}`;
-
-    // return this.database.ref(listRef).remove()
-    //   .then(() => this.database.ref(userListsRef).remove())
-    //   .catch((e) => {
-    //     console.log(e);
-    //     return null;
-    //   });
-
-    // const listRef = `lists/${list.key}`;
     const userListsRef = `users/${userId}/lists`
-    await this.database.collection('lists').doc(listId).delete();
     await this.database.collection(userListsRef).doc(listId).delete();
   }
 
-  getTodos = async (listId) => {
+  getTodos = async (listId, userId) => {
     let todos = {}
-    const refKey = `lists/${listId}/todos`
+    const refKey = `users/${userId}/lists/${listId}/todos`
     await this.database.collection(refKey).get().then(async function(querySnapshot) {
       await querySnapshot.forEach(function(doc) {
         // doc.data() is never undefined for query doc snapshots
-        console.log(doc.id, " => ", doc.data());
         todos[doc.id] = doc.data();
       });
     });
     return todos
-    // const listsRefKey = `user/${userId}/lists/`;
-    // const refKey = `lists/${listId}/todos`;
-    // const snapshot = await this.database.ref(refKey).once('value');
-
-    // if (snapshot.val()) {
-    //   return snapshot.val();
-    // }
-
-    // return null;
   }
 
   setTodos = (list, todo, userId) => {
@@ -113,17 +88,19 @@ class Lists extends Database {
       return false;
     }
     const todoId = uuid();
-    const refKey = `lists/${list.key}/todos`;
+    const refKey = `users/${userId}/lists/${list.key}/todos`;
     return this.database.collection(refKey).doc(todoId).set(todo);
   }
 
-  updateTodo = async (todoId, listId, todo) => {
-    const refKey = `lists/${listId}/todos`;
-    return await this.database.collection(refKey).doc(todoId).set(todo);
+  updateTodo = async (todoId, listId, userId, todo) => {
+    const refKey = `users/${userId}/lists/${listId}/todos`;
+    console.log(refKey)
+    console.log(todo)
+    return this.database.collection(refKey).doc(todoId).set(todo, { merge: true });
   }
 
-  deleteTodo = (todoId, listId) => {
-    const refKey = `lists/${listId}/todos`;
+  deleteTodo = (todoId, listId, userId) => {
+    const refKey = `users/${userId}lists/${listId}/todos`;
     return this.database.collection(refKey).doc(todoId).delete();
   }
 }

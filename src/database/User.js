@@ -6,19 +6,12 @@ class User extends Database {
     try {
       const response = await this.app.auth().createUserWithEmailAndPassword(email, password);
       this.app.auth().onAuthStateChanged(async (currentUser) => {
-        const userRef = `users/${currentUser.uid}/`;
         const profile = {
           uid: currentUser.uid,
           name: currentUser.displayName,
           email: currentUser.email,
         };
-        await this.database.collection(userRef).get().then(async function(querySnapshot) {
-          await querySnapshot.forEach(function(doc) {
-            // doc.data() is never undefined for query doc snapshots
-            console.log(doc.id, " => ", doc.data());
-            return doc.data();
-          });
-        });
+        await this.database.collection("users").doc(currentUser.uid).set(profile)
       });
       return this._success(response);
     } catch (e) {
@@ -29,8 +22,6 @@ class User extends Database {
   login = async (email, password) => {
     try {
       const self = await this;
-      console.log(self)
-      console.log(self.app)
       const response = await self.app.auth().signInWithEmailAndPassword(email, password);
       return this._success(response);
     } catch (e) {
@@ -41,10 +32,7 @@ class User extends Database {
   logout = async () => {
     try {
       const self = await this;
-      console.log(self)
-      console.log(self.app)
       const response = await self.app.auth().signOut();
-      console.log(response)
       return this._success(response);
     } catch (e) {
       console.log(e)

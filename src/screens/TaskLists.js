@@ -4,6 +4,7 @@ import {
   Text,
   AsyncStorage,
   ScrollView,
+  Button,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import PropTypes from 'prop-types';
@@ -18,6 +19,7 @@ import ListsDb from '../database/Lists';
 import Header from '../components/UI/Header';
 import Buttons from '../components/UI/Buttons';
 import SimpleModal from '../components/Modals/SimpleModal';
+import * as Permissions from 'expo-permissions';
 
 export default class TaskLists extends React.Component {
   _isMounted = false;
@@ -29,7 +31,6 @@ export default class TaskLists extends React.Component {
       name: '',
       owner: '',
       userEmails: {},
-      todos: {},
     };
 
     this.state = {
@@ -42,11 +43,16 @@ export default class TaskLists extends React.Component {
       createBtnLoading: false,
       currentUser: null,
       loading: true,
+      isNotificationPermitted: false,
+      notification: {}
     };
   }
 
-  componentDidMount() {
+  async componentDidMount() {
     this._isMounted = false;
+    this.setState({
+      isNotificationPermitted: await this._confirmNotificationPermission()
+    })
     AsyncStorage.getItem('currentUser')
       .then((data) => {
         const currentUser = JSON.parse(data);
@@ -74,8 +80,12 @@ export default class TaskLists extends React.Component {
       });
   }
 
-  componentWillUnmount() {
-    this._isMounted = false;
+
+  async _confirmNotificationPermission () {
+    const permission = await Permissions.getAsync(Permissions.NOTIFICATIONS)
+    if (permission.status === 'granted') return true
+    const askResult = await Permissions.askAsync(Permissions.NOTIFICATIONS)
+    return askResult.status === 'granted'
   }
 
   onPressAction = (item, e = undefined) => {
@@ -132,14 +142,14 @@ export default class TaskLists extends React.Component {
   }
 
   addEmailToList = () => {
-    const { listItem } = this.state;
+    const { listItem, currentUser} = this.state;
     const { userEmails } = listItem;
     let { email } = this.state;
     const emailKey = md5(email);
 
     userEmails[emailKey] = this.addUnverifiedUserToList(emailKey, email);
     listItem.userEmails = userEmails;
-    ListsDb.updateTodoList(listItem);
+    ListsDb.updateTodoList(listItem, currentUser.uid);
     email = '';
     this.setState({ listItem, email });
   }

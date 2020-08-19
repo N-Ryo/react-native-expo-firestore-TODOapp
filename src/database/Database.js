@@ -26,7 +26,6 @@ export default class Database {
     this.app = firebase.initializeApp(firebaseConfig);
     this.database = this.app.firestore();
     Database.instance = this;
-    console.log(Database.instance.app.auth())
     return Database.instance;
   }
 }
